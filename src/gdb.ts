@@ -1317,7 +1317,8 @@ export class GDBDebugSession extends LoggingDebugSession {
         return false;
     }
 
-    private shouldUseMonitorForAddr(addrHex: string): boolean {
+    private shouldUseMonitorForAddr(addrHex: string, isWrite: boolean): boolean {
+        if (!isWrite) { return false; }
         const a = parseInt(addrHex);
         if (Number.isNaN(a)) { return false; }
         return this.addrInFlash(a);
@@ -1362,7 +1363,7 @@ export class GDBDebugSession extends LoggingDebugSession {
         }
 
         // --- monitor path for flash ---
-        if (this.shouldUseMonitorForAddr(useAddr)) {
+        if (this.shouldUseMonitorForAddr(useAddr, false)) {
             (async () => {
                 try {
                     const bytes = await this.monitorFlashRead(useAddr, length);
@@ -1409,7 +1410,7 @@ export class GDBDebugSession extends LoggingDebugSession {
         const data = buf.toString('hex');
 
         // --- monitor path for flash ---
-        if (this.shouldUseMonitorForAddr(useAddr)) {
+        if (this.shouldUseMonitorForAddr(useAddr, true)) {
             (async () => {
                 try {
                     await this.monitorFlashWrite(useAddr, data);
@@ -1439,7 +1440,7 @@ export class GDBDebugSession extends LoggingDebugSession {
 
     protected readMemoryRequestCustom(response: DebugProtocol.Response, startAddress: string, length: number) {
         const addrHex = startAddress; // VS Code memory view passes hex like "0x0800...."
-        if (this.shouldUseMonitorForAddr(addrHex)) {
+        if (this.shouldUseMonitorForAddr(addrHex, false)) {
             (async () => {
                 try {
                     const bytes = await this.monitorFlashRead(addrHex, length);
@@ -1486,7 +1487,7 @@ export class GDBDebugSession extends LoggingDebugSession {
     protected writeMemoryRequestCustom(response: DebugProtocol.Response, startAddress: number, data: string) {
         const address = hexFormat(startAddress, 8);
 
-        if (this.shouldUseMonitorForAddr(address)) {
+        if (this.shouldUseMonitorForAddr(address, true)) {
             (async () => {
                 try {
                     await this.monitorFlashWrite(address, data);
