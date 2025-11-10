@@ -60,14 +60,14 @@ export function encodeReference(threadId: number, frameId: number): number {
 
 enum HandleRegions {
     /* eslint-disable @stylistic/no-multi-spaces */
-    GLOBAL_HANDLE_ID      = 0xFFFFFFFF,
-    STACK_HANDLES_START   = encodeReference(0x01, 0x000),
-    STACK_HANDLES_FINISH  = encodeReference(0xFF, 0xFFF),
-    STATIC_HANDLES_START  = STACK_HANDLES_FINISH + 1,
+    GLOBAL_HANDLE_ID = 0xFFFFFFFF,
+    STACK_HANDLES_START = encodeReference(0x01, 0x000),
+    STACK_HANDLES_FINISH = encodeReference(0xFF, 0xFFF),
+    STATIC_HANDLES_START = STACK_HANDLES_FINISH + 1,
     STATIC_HANDLES_FINISH = STATIC_HANDLES_START + RegionSize,
-    REG_HANDLE_START      = STATIC_HANDLES_FINISH + 1,
-    REG_HANDLE_FINISH     = REG_HANDLE_START + RegionSize,
-    VAR_HANDLES_START     = REG_HANDLE_FINISH + 1,
+    REG_HANDLE_START = STATIC_HANDLES_FINISH + 1,
+    REG_HANDLE_FINISH = REG_HANDLE_START + RegionSize,
+    VAR_HANDLES_START = REG_HANDLE_FINISH + 1,
     rest = 0xFFFFFFFF - VAR_HANDLES_START
     /* eslint-enable */
 }
@@ -125,7 +125,7 @@ class CustomStoppedEvent extends Event implements DebugProtocol.Event {
 }
 
 class PendingContinue {
-    constructor(public shouldContinue: boolean, public haveMore?: () => boolean) {}
+    constructor(public shouldContinue: boolean, public haveMore?: () => boolean) { }
 }
 
 class VSCodeRequest<RespType, ArgsType> {
@@ -138,7 +138,7 @@ class VSCodeRequest<RespType, ArgsType> {
         public resolve: any,
         public reject: any,
         public extra: any[]
-    ) {}
+    ) { }
 }
 
 /*
@@ -156,7 +156,7 @@ export class RequestQueue<RespType, ArgsType> {
     private queue: VSCodeRequest<RespType, ArgsType>[] = [];
     private queueBusy = false;
     public pendedContinue = new PendingContinue(false, this.haveMore.bind(this));
-    constructor(private alwaysResolve = true) {}
+    constructor(private alwaysResolve = true) { }
     public add(
         // For the varargs, extra can be any set of args but the first arg if used, is of type PendContinue
         functor: (response: RespType, args: ArgsType, ...extra: any[]) => Promise<void>,
@@ -1329,6 +1329,48 @@ export class GDBDebugSession extends LoggingDebugSession {
         this.disassember.disassembleProtocolRequest(response, args, request);
     }
 
+    // --- Hardcoded monitor-flash support (simple, no config) ---
+    // Adjust these ranges to your device. Format: [start, end] inclusive
+    private static readonly MONITOR_FLASH_RANGES: Array<[number, number]> = [
+        [0x08000000, 0x080FFFFF],   // STM32Fxx typical bank (example)
+        // Add more if needed
+    ];
+
+    private addrInFlash(addr: number): boolean {
+        for (const [lo, hi] of GDBDebugSession.MONITOR_FLASH_RANGES) {
+            if (addr >= lo && addr <= hi) { return true; }
+        }
+        return false;
+    }
+
+    private shouldUseMonitorForAddr(addrHex: string): boolean {
+        const a = parseInt(addrHex);
+        if (Number.isNaN(a)) { return false; }
+        return this.addrInFlash(a);
+    }
+
+    private async monitorFlashRead(addrHex: string, length: number): Promise<Uint8Array> {
+        // Change command to match your server
+        const cmd = `monitor flash_read ${addrHex} ${length}`;
+        const mi = await this.miDebugger.sendCommand(`interpreter-exec console "${cmd}"`, false, true);
+        const text = mi.output || '';
+        // Expect hex bytes in output; strip non-hex and parse
+        const hex = text.replace(/[^0-9a-fA-F]/g, '');
+        const n = Math.floor(hex.length / 2);
+        const out = new Uint8Array(n);
+        for (let i = 0, dx = 0; i < n; i++, dx += 2) {
+            const tmp = hex[dx] + hex[dx + 1];
+            out[i] = twoCharsToIntMap[tmp];
+        }
+        return out;
+    }
+
+    private async monitorFlashWrite(addrHex: string, dataHex: string): Promise<void> {
+        // Change command to match your server
+        const cmd = `monitor flash_write ${addrHex} ${dataHex}`;
+        await this.miDebugger.sendCommand(`interpreter-exec console "${cmd}"`, false, true);
+    }
+
     protected readMemoryRequest(response: DebugProtocol.ReadMemoryResponse, args: DebugProtocol.ReadMemoryArguments, request?: DebugProtocol.Request): void {
         if (this.isBusy()) {
             this.busyError(response, args);
@@ -1345,6 +1387,22 @@ export class GDBDebugSession extends LoggingDebugSession {
             this.sendResponse(response);
             return;
         }
+
+        // --- monitor path for flash ---
+        if (this.shouldUseMonitorForAddr(useAddr)) {
+            (async () => {
+                try {
+                    const bytes = await this.monitorFlashRead(useAddr, length);
+                    response.body.data = Buffer.from(bytes).toString('base64');
+                    this.sendResponse(response);
+                } catch (error) {
+                    this.sendErrorResponse(response, 114, `Read memory (monitor) error: ${error?.toString?.() || error}`);
+                    this.sendEvent(new TelemetryEvent('Error', 'Reading Memory (monitor)', `addr=${useAddr} len=${length}`));
+                }
+            })();
+            return;
+        }
+
         // const offset = args.offset ? `-o ${args.offset}` : '';
         const command = `data-read-memory-bytes "${useAddr}" ${length}`;
         this.miDebugger.sendCommand(command).then((node) => {
@@ -1377,6 +1435,22 @@ export class GDBDebugSession extends LoggingDebugSession {
         const buf = Buffer.from(args.data, 'base64');
         const data = buf.toString('hex');
 
+        // --- monitor path for flash ---
+        if (this.shouldUseMonitorForAddr(useAddr)) {
+            (async () => {
+                try {
+                    await this.monitorFlashWrite(useAddr, data);
+                    response.body = { bytesWritten: buf.length };
+                    this.sendResponse(response);
+                } catch (error) {
+                    (response as DebugProtocol.Response).body = { error: error };
+                    this.sendErrorResponse(response, 114, `Write memory (monitor) error: ${error?.toString?.() || error}`);
+                    this.sendEvent(new TelemetryEvent('Error', 'Writing Memory (monitor)', `addr=${useAddr} bytes=${buf.length}`));
+                }
+            })();
+            return;
+        }
+
         // Note: We don't do partials
         this.miDebugger.sendCommand(`data-write-memory-bytes ${useAddr} ${data}`).then((node) => {
             response.body = {
@@ -1391,6 +1465,27 @@ export class GDBDebugSession extends LoggingDebugSession {
     }
 
     protected readMemoryRequestCustom(response: DebugProtocol.Response, startAddress: string, length: number) {
+        const addrHex = startAddress; // VS Code memory view passes hex like "0x0800...."
+        if (this.shouldUseMonitorForAddr(addrHex)) {
+            (async () => {
+                try {
+                    const bytes = await this.monitorFlashRead(addrHex, length);
+                    const start = parseInt(addrHex);
+                    const end = start + bytes.length;
+                    response.body = {
+                        startAddress: hexFormat(start),
+                        endAddress: hexFormat(end),
+                        bytes: Array.from(bytes)
+                    };
+                    this.sendResponse(response);
+                } catch (error) {
+                    response.body = { error: error };
+                    this.sendErrorResponse(response, 114, `Read memory (monitor) error: ${error?.toString?.() || error}`);
+                    this.sendEvent(new TelemetryEvent('Error', 'Reading Memory (monitor)', `${addrHex}-${length}`));
+                }
+            })();
+            return;
+        }
         this.miDebugger.sendCommand(`data-read-memory-bytes "${startAddress}" ${length}`).then((node) => {
             const results = parseReadMemResults(node);
             // const bytes = results.data.match(/[0-9a-f]{2}/g).map((b) => parseInt(b, 16));
@@ -1416,6 +1511,21 @@ export class GDBDebugSession extends LoggingDebugSession {
 
     protected writeMemoryRequestCustom(response: DebugProtocol.Response, startAddress: number, data: string) {
         const address = hexFormat(startAddress, 8);
+
+        if (this.shouldUseMonitorForAddr(address)) {
+            (async () => {
+                try {
+                    await this.monitorFlashWrite(address, data);
+                    this.sendResponse(response);
+                } catch (error) {
+                    response.body = { error: error };
+                    this.sendErrorResponse(response, 114, `Write memory (monitor) error: ${error?.toString?.() || error}`);
+                    this.sendEvent(new TelemetryEvent('Error', 'Writing Memory (monitor)', `${address}-${data.length / 2}`));
+                }
+            })();
+            return;
+        }
+
         this.miDebugger.sendCommand(`data-write-memory-bytes ${address} ${data}`).then((node) => {
             this.sendResponse(response);
         }, (error) => {
@@ -1599,7 +1709,7 @@ export class GDBDebugSession extends LoggingDebugSession {
                             this.handleMsg('log', 'GDB commands overridePreEndSessionCommands failed ' + (e ? e.toString() : 'Unknown error') + '\n');
                         }
                     }
-                    await new Promise(() => setTimeout(() => {}, 5));
+                    await new Promise(() => setTimeout(() => { }, 5));
                 }
                 this.waitForServerExitAndRespond(response);     // Will wait asynchronously until the following actions are done
                 if (args.terminateDebuggee || args.suspendDebuggee) {

@@ -9,7 +9,17 @@ tmp/**
 tsconfig.json
 vsc-extension-quickstart.md
 webpack.config.js
-node_modules
 binary_modules
 
-!node_modules/@vscode/webview-ui-toolkit
+# Exclude all node_modules by default
+node_modules/**
+
+# But include native modules that are needed at runtime
+!node_modules/@vscode/webview-ui-toolkit/**
+!node_modules/usb/**
+!node_modules/serialport/**
+!node_modules/@serialport/**
+!node_modules/node-addon-api/**
+!node_modules/node-gyp-build/**
+!node_modules/bindings/**
+!node_modules/file-uri-to-path/**

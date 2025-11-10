@@ -3082,6 +3082,7 @@
         "@vscode/debugadapter": "^1.68.0",
         "@vscode/debugprotocol": "^1.68.0",
         "@vscode/test-electron": "^2.4.1",
+        "electron-rebuild": "^3.2.9",
         "globals": "^15.14.0",
         "mocha": "^11.0.1",
         "ts-loader": "^9.5.2",
@@ -3119,7 +3120,6 @@
         "url": "https://github.com/Marus/cortex-debug/issues"
     },
     "scripts": {
-        "vscode:prepublish": "npm run lint && webpack --mode production && node dist/docgen.js && npm ci -C binary_modules --omit dev && cp -a binary_modules/node_modules dist/",
         "watch": "webpack --mode development --watch",
         "compile": "webpack --mode development && node dist/docgen.js",
         "test-compile": "tsc -p ./",
