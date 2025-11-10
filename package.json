@@ -1,5 +1,5 @@
 {
-    "version": "1.13.0-pre6",
+    "version": "1.13.0-pre8",
     "preview": false,
     "activationEvents": [
         "onDebugResolve:cortex-debug",
@@ -628,6 +628,12 @@
                                 "deprecated": true,
                                 "description": "Deprecated: Restart is now handled by VSCode and it is pretty much the same as Start"
                             },
+                            "overridePreEndSessionCommands": {
+                                "default": [],
+                                "type": "array",
+                                "items": "string",
+                                "description": "Override the commands that are normally executed at the start of ending a debug session (e.g. when stopping debugging)."
+                            },
                             "overrideGDBServerStartedRegex": {
                                 "description": "You can supply a regular expression (https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions) in the configuration property to override the output from the GDB Server that is looked for to determine if the GDB Server has started. Under most circumstances this will not be necessary - but could be needed as a result of a change in the output of a GDB Server making it incompatible with cortex-debug. This property has no effect for bmp or external GDB Server types.",
                                 "type": "string",
@@ -793,6 +799,24 @@
                                 "minimum": 0,
                                 "maximum": 9,
                                 "default": 0
+                            },
+                            "hardwareBreakpoints": {
+                                "description": "WARNING: Force only HW breakpoints to be used. By default GDB will use HW or SW  breakpoints depending on memory type. Use this only in rare circumstances to work around issues in your gdb-server or hardware. This setting is NOT recommended for general use.",
+                                "type": "object",
+                                "properties": {
+                                    "required": {
+                                        "type": "boolean",
+                                        "default": false,
+                                        "description": "If true, forces the use of hardware breakpoints"
+                                    },
+                                    "limit": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "multipleOf": 1,
+                                        "default": 0,
+                                        "description": "If limit > 0, enforce a limit on the number of hardware breakpoints that can be used"
+                                    }
+                                }
                             },
                             "liveWatch": {
                                 "description": "An object with parameters for Live Watch",
@@ -1761,6 +1785,12 @@
                                 "items": "string",
                                 "description": "Additional GDB Commands to be executed at the end of the reset sequence"
                             },
+                            "overridePreEndSessionCommands": {
+                                "default": [],
+                                "type": "array",
+                                "items": "string",
+                                "description": "Override the commands that are normally executed at the start of ending a debug session (e.g. when stopping debugging)."
+                            },
                             "overrideGDBServerStartedRegex": {
                                 "description": "You can supply a regular expression (https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions) in the configuration property to override the output from the GDB Server that is looked for to determine if the GDB Server has started. Under most circumstances this will not be necessary - but could be needed as a result of a change in the output of a GDB Server making it incompatible with cortex-debug. This property has no effect for bmp or external GDB Server types.",
                                 "type": "string",
@@ -1937,6 +1967,24 @@
                                 "minimum": 0,
                                 "maximum": 9,
                                 "default": 0
+                            },
+                            "hardwareBreakpoints": {
+                                "description": "WARNING: Force only HW breakpoints to be used. By default GDB will use HW or SW  breakpoints depending on memory type. Use this only in rare circumstances to work around issues in your gdb-server or hardware. This setting is NOT recommended for general use.",
+                                "type": "object",
+                                "properties": {
+                                    "required": {
+                                        "type": "boolean",
+                                        "default": false,
+                                        "description": "If true, forces the use of hardware breakpoints"
+                                    },
+                                    "limit": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "multipleOf": 1,
+                                        "default": 0,
+                                        "description": "If limit > 0, enforce a limit on the number of hardware breakpoints that can be used"
+                                    }
+                                }
                             },
                             "liveWatch": {
                                 "description": "An object with parameters for Live Watch",

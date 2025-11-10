@@ -36,6 +36,9 @@ If the type is marked as `{...}` it means that it is a complex item can have mul
 | gdbPath | string | Both | This setting can be used to override the GDB path user/workspace setting for a particular launch configuration. This should be the full pathname to the executable (or name of the executable if it is in your PATH). Note that other toolchain executables with the configured prefix must still be available. |
 | gdbTarget | string | Both | For externally (servertype = "external") controlled GDB Servers you must specify the GDB target to connect to. This can either be a "hostname:port" combination or path to a serial port |
 | graphConfig | {object} | Both | Description of how graphing can be done. See our Wiki for details |
+| hardwareBreakpoints | object | Both | WARNING: Force only HW breakpoints to be used. By default GDB will use HW or SW  breakpoints depending on memory type. Use this only in rare circumstances to work around issues in your gdb-server or hardware. This setting is NOT recommended for general use. |
+| hardwareBreakpoints<br>.limit | number | Both | If limit > 0, enforce a limit on the number of hardware breakpoints that can be used |
+| hardwareBreakpoints<br>.required | boolean | Both | If true, forces the use of hardware breakpoints |
 | interface | string | Both | Debug Interface type to use for connections (defaults to SWD) - Used for J-Link, ST-LINK and BMP probes. |
 | ipAddress | string | Both | IP Address for networked J-Link Adapter |
 | jlinkscript | string | Both | J-Link script file - optional input file for customizing J-Link actions. |
@@ -51,6 +54,7 @@ If the type is marked as `{...}` it means that it is a complex item can have mul
 | overrideAttachCommands | string[] | Attach | Override the commands that are normally executed as part of attaching to a running target. In most cases it is preferable to use preAttachCommands and postAttachCommands to customize the GDB attach sequence. |
 | overrideGDBServerStartedRegex | string | Both | You can supply a regular expression (https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions) in the configuration property to override the output from the GDB Server that is looked for to determine if the GDB Server has started. Under most circumstances this will not be necessary - but could be needed as a result of a change in the output of a GDB Server making it incompatible with cortex-debug. This property has no effect for bmp or external GDB Server types. |
 | overrideLaunchCommands | string[] | Launch | Override the commands that are normally executed as part of flashing and launching the target. In most cases it is preferable to use preLaunchCommands and postLaunchCommands to customize the GDB launch sequence. |
+| overridePreEndSessionCommands | string[] | Both | Override the commands that are normally executed at the start of ending a debug session (e.g. when stopping debugging). |
 | overrideResetCommands | string[] | Both | Override the commands that are normally executed as part of reset-ing the target. When undefined the deprecated overrideRestartCommands is used if it exists. |
 | postAttachCommands | string[] | Attach | Additional GDB Commands to be executed after the main attach sequence has finished. |
 | postLaunchCommands | string[] | Launch | Additional GDB Commands to be executed after the main launch sequence has finished. |

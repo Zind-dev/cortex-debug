@@ -366,7 +366,9 @@ export class MI2 extends EventEmitter implements IBackend {
                                         fid = item[1];  // for future use, available for thread-selected
                                     }
                                 }
-                                if (record.asyncClass === 'thread-created') {
+                                if (record.asyncClass === 'breakpoint-deleted') {
+                                    this.emit('breakpoint-deleted', { bkptId: parseInt(tid) });
+                                } else if (record.asyncClass === 'thread-created') {
                                     this.emit('thread-created', { threadId: parseInt(tid), threadGroupId: gid });
                                 } else if (record.asyncClass === 'thread-exited') {
                                     this.emit('thread-exited', { threadId: parseInt(tid), threadGroupId: gid });
@@ -403,7 +405,7 @@ export class MI2 extends EventEmitter implements IBackend {
         }
     }
 
-    // stop() can get called twice ... once by the disconnect sequence and once by the server existing because
+    // stop() can get called twice ... once by the disconnect sequence and once by the server exiting because
     // we called disconnect. And the sleeps don't help that cause
     private exiting = false;
     public async stop() {
@@ -439,8 +441,16 @@ export class MI2 extends EventEmitter implements IBackend {
             // program is in paused state
             try {
                 startKillTimeout(500);
-                await new Promise((res) => setTimeout(res, 100));       // For some people delay was needed. Doesn't hurt I guess
-                await this.sendCommand('target-disconnect');            // Yes, this can fail
+                try {
+                    await this.sendCommand('interpreter-exec console "monitor exit"');
+                } catch (e) {
+                    // It is possible gdb server has not implemented this
+                    ServerConsoleLog('GDB "monitor exit" failed, continue to disconnect anyway', this.pid);
+                }
+                await new Promise(() => setTimeout(() => {}, 50));          // For some people delay was needed. Doesn't hurt I guess
+                if (!this.exited) {
+                    await this.sendCommand('target-disconnect');            // Yes, this can fail
+                }
             } catch (e) {
                 if (this.exited) {
                     ServerConsoleLog('GDB already exited during a target-disconnect', this.pid);
@@ -559,20 +569,6 @@ export class MI2 extends EventEmitter implements IBackend {
         });
     }
 
-    public goto(filename: string, line: number): Thenable<boolean> {
-        if (trace) {
-            this.log('stderr', 'goto');
-        }
-        return new Promise((resolve, reject) => {
-            const target: string = '"' + (filename ? escape(filename) + ':' : '') + line.toString() + '"';
-            this.sendCommand('break-insert -t ' + target).then(() => {
-                this.sendCommand('exec-jump ' + target).then((info) => {
-                    resolve(info.resultRecords.resultClass === 'running');
-                }, reject);
-            }, reject);
-        });
-    }
-
     public restart(commands: string[]): Thenable<boolean> {
         if (trace) {
             this.log('stderr', 'restart');
@@ -645,10 +641,24 @@ export class MI2 extends EventEmitter implements IBackend {
                 bkptArgs += `-c "${breakpoint.condition}" `;
             }
 
-            if (breakpoint.raw) {
+            if (breakpoint.isTemporary) {
+                bkptArgs += '-t ';
+            }
+
+            if (breakpoint.isFunction) {
+                bkptArgs += '--function ' + '"' + escape(breakpoint.raw) + '" ';
+            } else if (breakpoint.raw) {
                 bkptArgs += '*' + escape(breakpoint.raw);
             } else {
-                bkptArgs += '"' + escape(breakpoint.file) + ':' + breakpoint.line + '"';
+                bkptArgs += '"' + escape(breakpoint.file) + ':' + breakpoint.line + '" ';
+            }
+
+            if (breakpoint.hwOpt) {
+                if (breakpoint.logMessage) {
+                    reject(new MIError('Hardware breakpoints not supported by gdb with logpoints (dprintf) ' + bkptArgs, 'internal'));
+                    return;
+                }
+                bkptArgs = breakpoint.hwOpt + ' ' + bkptArgs;
             }
 
             const cmd = breakpoint.logMessage ? 'dprintf-insert' : 'break-insert';
@@ -691,7 +701,7 @@ export class MI2 extends EventEmitter implements IBackend {
 
             bkptArgs += '*' + hexFormat(breakpoint.address);
 
-            this.sendCommand(`break-insert ${bkptArgs}`).then((result) => {
+            this.sendCommand(`break-insert ${breakpoint.htOpt || ''} ${bkptArgs}`).then((result) => {
                 if (result.resultRecords.resultClass === 'done') {
                     const bkptNum = parseInt(result.result('bkpt.number'));
                     breakpoint.number = bkptNum;
@@ -833,7 +843,7 @@ export class MI2 extends EventEmitter implements IBackend {
                     ret.push({
                         address: addr,
                         fileName: filename,
-                        file: file,
+                        file: file || filename,
                         function: func || from,
                         level: level,
                         line: line
