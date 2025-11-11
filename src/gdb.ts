@@ -1404,6 +1404,7 @@ export class GDBDebugSession extends LoggingDebugSession {
     // --- Hardcoded monitor-flash support (simple, no config) ---
     // Adjust these ranges to your device. Format: [start, end] inclusive
     private static readonly MONITOR_FLASH_RANGES: Array<[number, number]> = [
+        [0x00000000, 0x0003FFFF],   // K1921VK028
         [0x08000000, 0x080FFFFF],   // STM32Fxx typical bank (example)
         // Add more if needed
     ];

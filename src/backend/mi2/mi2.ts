@@ -43,7 +43,7 @@ function couldBeOutput(line: string) {
     return true;
 }
 
-const trace = false;
+const trace = true;
 
 export class MI2 extends EventEmitter implements IBackend {
     public debugOutput: ADAPTER_DEBUG_MODE;
